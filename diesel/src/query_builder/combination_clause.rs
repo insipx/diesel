@@ -30,8 +30,8 @@ impl<Combinator, Rule, Source, Rhs> CombinationClause<Combinator, Rule, Source, 
         CombinationClause {
             combinator,
             duplicate_rule,
-            source: ParenthesisWrapper(source),
-            rhs: ParenthesisWrapper(rhs),
+            source: ParenthesisWrapper { inner: source },
+            rhs: ParenthesisWrapper { inner: rhs },
         }
     }
 }
@@ -220,7 +220,15 @@ pub trait SupportsCombinationClause<Combinator, Rule> {}
 
 #[derive(Debug, Copy, Clone, QueryId)]
 /// Wrapper used to wrap rhs sql in parenthesis when supported by backend
-pub struct ParenthesisWrapper<T>(T);
+#[diesel_derives::__diesel_public_if(
+    feature = "i-implement-a-third-party-backend-and-opt-into-breaking-changes",
+    public_fields(inner)
+)]
+pub struct ParenthesisWrapper<T> {
+    /// the inner parenthesis definition
+    #[allow(dead_code)]
+    inner: T,
+}
 
 #[cfg(feature = "postgres_backend")]
 mod postgres {
@@ -230,7 +238,7 @@ mod postgres {
     impl<T: QueryFragment<Pg>> QueryFragment<Pg> for ParenthesisWrapper<T> {
         fn walk_ast<'b>(&'b self, mut out: AstPass<'_, 'b, Pg>) -> QueryResult<()> {
             out.push_sql("(");
-            self.0.walk_ast(out.reborrow())?;
+            self.inner.walk_ast(out.reborrow())?;
             out.push_sql(")");
             Ok(())
         }
@@ -252,7 +260,7 @@ mod mysql {
     impl<T: QueryFragment<Mysql>> QueryFragment<Mysql> for ParenthesisWrapper<T> {
         fn walk_ast<'b>(&'b self, mut out: AstPass<'_, 'b, Mysql>) -> QueryResult<()> {
             out.push_sql("(");
-            self.0.walk_ast(out.reborrow())?;
+            self.inner.walk_ast(out.reborrow())?;
             out.push_sql(")");
             Ok(())
         }
@@ -273,7 +281,7 @@ mod sqlite {
             // we can emulate this by construct a fake outer
             // SELECT * FROM (inner_query) statement
             out.push_sql("SELECT * FROM (");
-            self.0.walk_ast(out.reborrow())?;
+            self.inner.walk_ast(out.reborrow())?;
             out.push_sql(")");
             Ok(())
         }
